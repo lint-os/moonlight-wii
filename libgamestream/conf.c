@@ -145,6 +145,8 @@ int load_cert(struct GS_CLIENT_T *hnd, const char *keydir) {
     int c;
     int length = 0;
     while ((c = fgetc(f)) != EOF) {
+        if (length + 2 >= (int) sizeof(hnd->cert_hex))
+            break;
         sprintf(&hnd->cert_hex[length], "%02x", c);
         length += 2;
     }
@@ -161,6 +163,7 @@ int load_cert(struct GS_CLIENT_T *hnd, const char *keydir) {
         return gs_set_error(GS_FAILED, "Error loading key into memory: %s", buf);
     }
 
+    printf("[conf] load_cert: cert+key loaded OK\n");
     return GS_OK;
 }
 
@@ -170,7 +173,16 @@ static int init_cert(const char *keydir) {
 
     char key_path[PATH_MAX];
     snprintf(key_path, PATH_MAX, "%s%c%s", keydir, PATH_SEPARATOR, KEY_FILE_NAME);
-    return mkcert_generate(cert_path, key_path);
+    int ret = mkcert_generate(cert_path, key_path);
+    printf("[conf] init_cert: mkcert_generate=%d cert=%s\n", ret, cert_path);
+    FILE *cf = fopen(cert_path, "rb");
+    if (cf) {
+        fseek(cf, 0, SEEK_END);
+        long cs = ftell(cf);
+        fclose(cf);
+        printf("[conf] cert file size=%ld\n", cs);
+    }
+    return ret;
 }
 
 int mkdirtree(const char *directory) {

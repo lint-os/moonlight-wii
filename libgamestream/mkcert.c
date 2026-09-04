@@ -17,6 +17,7 @@
 
 #include "errors.h"
 #include "set_error.h"
+#include "tls_rng.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,7 +26,6 @@
 
 #include <mbedtls/rsa.h>
 #include <mbedtls/x509_crt.h>
-#include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/md.h>
 #include <mbedtls/error.h>
@@ -96,14 +96,12 @@ int mkcert_generate(const char *certFile, const char *keyFile) {
     mbedtls_pk_context key;
     mbedtls_x509write_cert crt;
     mbedtls_ctr_drbg_context ctr_drbg;
-    mbedtls_entropy_context entropy;
 
     mbedtls_pk_init(&key);
     mbedtls_x509write_crt_init(&crt);
     mbedtls_ctr_drbg_init(&ctr_drbg);
-    mbedtls_entropy_init(&entropy);
 
-    if ((ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (const unsigned char *) pers,
+    if ((ret = mbedtls_ctr_drbg_seed(&ctr_drbg, tls_rng, NULL, (const unsigned char *) pers,
                                      strlen(pers))) != 0) {
         mbedtls_strerror(ret, buf, 512);
         ret = gs_set_error(GS_FAILED, "mbedtls_ctr_drbg_seed returned -0x%04x - %s", (unsigned int) -ret, buf);
@@ -148,6 +146,5 @@ int mkcert_generate(const char *certFile, const char *keyFile) {
     mbedtls_pk_free(&key);
     mbedtls_x509write_crt_free(&crt);
     mbedtls_ctr_drbg_free(&ctr_drbg);
-    mbedtls_entropy_free(&entropy);
     return ret;
 }

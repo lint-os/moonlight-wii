@@ -261,7 +261,8 @@ void write_cdata(void *userData, const XML_Char *s, int len) {
         return;
     }
     void *allocated = realloc(search->memory, search->size + len + 1);
-    assert(allocated != NULL);
+    if (allocated == NULL)
+        return;
     search->memory = allocated;
 
     memcpy(search->memory + search->size, s, len);

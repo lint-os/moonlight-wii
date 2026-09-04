@@ -159,7 +159,7 @@ static int load_server_status(GS_CLIENT hnd, PSERVER_DATA server) {
         server->currentGame = currentGameText == NULL ? 0 : atoi(currentGameText);
         server->supports4K = serverCodecModeSupport != 0;
         server->supportsHdr = serverCodecModeSupport & 0x200;
-#ifdef __WIIU__
+#if defined(__WIIU__) || defined(__WII__)
         //! moonlight-wiiu modification, moonlight-tv usually sets this in session_create
         server->serverInfo.serverCodecModeSupport = serverCodecModeSupport;
 #endif
@@ -230,7 +230,7 @@ static void hex_to_bytes(const char *in, unsigned char *out, size_t maxlen, size
     };
     size_t inl = strlen(in);
     if (inl % 2) { return; }
-    assert (maxlen >= inl / 2);
+    if (inl / 2 > maxlen) { inl = maxlen * 2; }
     for (int count = 0; count < inl; count += 2) {
         char ch1 = in[count], ch2 = in[count + 1];
         if (ch1 < 0x30 || ch1 > 0x66 || ch2 < 0x30 || ch2 > 0x66) { return; }
@@ -319,12 +319,6 @@ int gs_pair(GS_CLIENT hnd, PSERVER_DATA server, const char *pin) {
         goto cleanup;
     }
 
-    if (server->currentGame != 0) {
-        ret = GS_WRONG_STATE;
-        gs_set_error(GS_WRONG_STATE, "The computer is currently in a game.\nYou must close the game before pairing.");
-        goto cleanup;
-    }
-
     // Generate the salted pin, then create an AES key from them
     struct {
         unsigned char salt[16];
@@ -344,7 +338,22 @@ int gs_pair(GS_CLIENT hnd, PSERVER_DATA server, const char *pin) {
     // because the user must enter the PIN before the server responds
     construct_url(hnd, url, sizeof(url), false, server->serverInfo.address, "pair",
                   "devicename=roth&updateState=1&phrase=getservercert&salt=%s&clientcert=%s", salt_hex, hnd->cert_hex);
+    {
+        char dbg[1024];
+        const char* cc = strstr(url, "clientcert=");
+        if (cc) {
+            const char* v = cc + 11;
+            snprintf(dbg, sizeof(dbg), "%.*s<clientcert len=%d first16=%.16s>", (int)(cc - url), url, (int)strlen(v), v);
+        } else {
+            snprintf(dbg, sizeof(dbg), "%s", url);
+        }
+        printf("[pair] getservercert: %s\n", dbg);
+    }
     data = http_data_alloc();
+    if (data == NULL) {
+        ret = gs_set_error(GS_OUT_OF_MEMORY, "Out of memory");
+        goto cleanup;
+    }
 
     if ((ret = http_request(hnd->http, url, data)) != GS_OK) {
         gs_set_error(ret, "Failed to request pairing. Check connection.");
@@ -472,7 +481,7 @@ int gs_pair(GS_CLIENT hnd, PSERVER_DATA server, const char *pin) {
     bytes_to_hex(challenge_response_encrypted, challenge_response_hex, 32);
 
     construct_url(hnd, url, sizeof(url), false, server->serverInfo.address, "pair",
-                  "devicename=rothupdateState=1&serverchallengeresp=%s", challenge_response_hex);
+                   "devicename=roth&updateState=1&serverchallengeresp=%s", challenge_response_hex);
     if ((ret = http_request(hnd->http, url, data)) != GS_OK) {
         goto cleanup;
     }
@@ -587,6 +596,13 @@ int gs_pair(GS_CLIENT hnd, PSERVER_DATA server, const char *pin) {
     cleanup:
     if (ret != GS_OK) {
         gs_unpair(hnd, server);
+
+        // If we failed when attempting to pair with a game running, that's likely the
+        // issue. Sunshine supports pairing with an active session, but GFE does not.
+        if (ret != GS_OK && server->currentGame != 0) {
+            gs_set_error(GS_WRONG_STATE, "The computer is currently in a game.\nYou must close the game before pairing.");
+            ret = GS_WRONG_STATE;
+        }
     }
 
     if (result != NULL) {
@@ -675,7 +691,13 @@ int gs_start_app(GS_CLIENT hnd, PSERVER_DATA server, STREAM_CONFIGURATION *confi
     bytes_to_hex((unsigned char *) config->remoteInputAesKey, rikey_hex, 16);
 
     data = http_data_alloc();
+    if (data == NULL) {
+        ret = gs_set_error(GS_OUT_OF_MEMORY, "Out of memory");
+        goto cleanup;
+    }
     bool resume = server->currentGame == 0;
+    printf("[gs] rikey=%s rikeyid=%d resume=%d action=%s appId=%d\n",
+           rikey_hex, rikeyid, resume, resume ? "launch" : "resume", appId);
 
     if (resume) {
         gs_set_timeout(hnd, 30);
@@ -821,6 +843,8 @@ int gs_download_cover(GS_CLIENT hnd, const SERVER_DATA *server, int appid, const
 
 GS_CLIENT gs_new(const char *keydir) {
     struct GS_CLIENT_T *hnd = malloc(sizeof(struct GS_CLIENT_T));
+    if (hnd == NULL)
+        return NULL;
     memset(hnd, 0, sizeof(struct GS_CLIENT_T));
     if (gs_conf_load(hnd, keydir) != GS_OK) {
         free(hnd);
