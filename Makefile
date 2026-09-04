@@ -17,7 +17,7 @@ APP_NAME	:= Moonlight
 APP_SHORTNAME	:= Moonlight
 APP_AUTHOR	:= GaryOderNichts
 
-include $(DEVKITPRO)/wut/share/wut_rules
+include $(DEVKITPPC)/wii_rules
 
 #-------------------------------------------------------------------------------
 # TARGET is the name of the output
@@ -29,50 +29,50 @@ include $(DEVKITPRO)/wut/share/wut_rules
 TARGET		:=	moonlight
 BUILD		:=	build
 SOURCES		:=	src \
-				src/wiiu \
+				src/wii \
 				libgamestream \
 				third_party/moonlight-common-c/src \
 				third_party/moonlight-common-c/reedsolomon \
-				third_party/moonlight-common-c/enet \
-				third_party/h264bitstream \
-				third_party/libuuid \
-				third_party/uuidstr
-DATA		:=	data
-INCLUDES	:=	src/wiiu \
+			third_party/moonlight-common-c/enet \
+			third_party/h264bitstream \
+			third_party/uuidstr
+DATA		:=
+INCLUDES	:=	src/wii \
 				libgamestream \
 				third_party/moonlight-common-c/src \
 				third_party/moonlight-common-c/reedsolomon \
-				third_party/moonlight-common-c/enet/include \
-				third_party/h264bitstream \
-				third_party/libuuid \
-				third_party/uuidstr
-SOURCE_FILES	:=	
-CONTENT		:=
-ICON		:=	res/iconTex.png
-TV_SPLASH	:=	res/bootTvTex.png
-DRC_SPLASH	:=	res/bootDrcTex.png
+			third_party/moonlight-common-c/enet/include \
+			third_party/h264bitstream \
+			third_party/uuidstr \
+			third_party/ffmpeg-wii/include
+SOURCE_FILES	:=
 
 #-------------------------------------------------------------------------------
 # options for code generation
 #-------------------------------------------------------------------------------
 CFLAGS	:=	-O3 -ffunction-sections -fdata-sections \
-			$(MACHDEP)
+			$(MACHDEP) -mmultiple -msdata \
+			-ffast-math -frename-registers \
+			-D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64
 
-CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -DBIGENDIAN -DUSE_MBEDTLS
+CFLAGS	+=	$(INCLUDE) -D__WII__ -DUSE_MBEDTLS -DHAS_SOCKLEN_T -DDEBUG
 
 CXXFLAGS	:= $(CFLAGS)
 
 ASFLAGS	:=	$(ARCH)
-LDFLAGS	=	$(ARCH) $(RPXSPECS) -Wl,-Map,$(notdir $*.map)
+LDFLAGS	=	$(ARCH) -T$(DEVKITPPC)/powerpc-eabi/lib/rvl.ld -Wl,-Map,$(notdir $*.map)
 
-LIBS	:= -lfreetype -lpng -lbz2 -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lSDL2 -lopus -lexpat -lz -lwut -lm
+ LIBS	:=	-lwiiuse -lbte -lfat -logc -lopus \
+			-lmbedtls -lmbedx509 -lmbedcrypto -lexpat \
+			-lfreetype -lbrotlidec -lbrotlicommon -lpng -lz -lbz2 \
+			-L$(TOPDIR)/third_party/ffmpeg-wii/lib -lavcodec -lswscale -lavutil \
+			-lm
 
 #-------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level
 # containing include and lib
 #-------------------------------------------------------------------------------
-LIBDIRS	:= $(PORTLIBS) $(WUT_ROOT)
-
+LIBDIRS	:= $(PORTLIBS) $(LIBOGC_LIB)
 
 #-------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
@@ -117,37 +117,10 @@ export HFILES_BIN	:=	$(addsuffix .h,$(subst .,_,$(BINFILES)))
 
 export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
 			$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+			-I$(LIBOGC_INC) \
 			-I$(CURDIR)/$(BUILD) -I$(DEVKITPRO)/portlibs/ppc/include/freetype2
 
-export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
-
-ifneq (,$(strip $(CONTENT)))
-	export APP_CONTENT := $(TOPDIR)/$(CONTENT)
-endif
-
-ifneq (,$(strip $(ICON)))
-	export APP_ICON := $(TOPDIR)/$(ICON)
-else ifneq (,$(wildcard $(TOPDIR)/$(TARGET).png))
-	export APP_ICON := $(TOPDIR)/$(TARGET).png
-else ifneq (,$(wildcard $(TOPDIR)/icon.png))
-	export APP_ICON := $(TOPDIR)/icon.png
-endif
-
-ifneq (,$(strip $(TV_SPLASH)))
-	export APP_TV_SPLASH := $(TOPDIR)/$(TV_SPLASH)
-else ifneq (,$(wildcard $(TOPDIR)/tv-splash.png))
-	export APP_TV_SPLASH := $(TOPDIR)/tv-splash.png
-else ifneq (,$(wildcard $(TOPDIR)/splash.png))
-	export APP_TV_SPLASH := $(TOPDIR)/splash.png
-endif
-
-ifneq (,$(strip $(DRC_SPLASH)))
-	export APP_DRC_SPLASH := $(TOPDIR)/$(DRC_SPLASH)
-else ifneq (,$(wildcard $(TOPDIR)/drc-splash.png))
-	export APP_DRC_SPLASH := $(TOPDIR)/drc-splash.png
-else ifneq (,$(wildcard $(TOPDIR)/splash.png))
-	export APP_DRC_SPLASH := $(TOPDIR)/splash.png
-endif
+export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib) -L$(LIBOGC_LIB)
 
 .PHONY: $(BUILD) clean all dist
 
@@ -155,19 +128,26 @@ endif
 all: $(BUILD)
 
 dist: all
-	cp moonlight.conf dist/wiiu/apps/moonlight/
-	cp moonlight.rpx dist/wiiu/apps/moonlight/
-	cp moonlight.wuhb dist/wiiu/apps/moonlight/
-#	cd dist; zip -FSr moonlight-wiiu.zip wiiu
+	mkdir -p dist/wii/apps/moonlight
+	cp moonlight.conf dist/wii/apps/moonlight/
+	cp moonlight.dol dist/wii/apps/moonlight/
 
-$(BUILD):
+src/wii/font_data.c: src/wii/font.ttf
+	cd src/wii && xxd -i font.ttf > font_data.c
+
+$(BUILD): src/wii/font_data.c
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 #-------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).rpx $(TARGET).elf
+	@rm -fr $(BUILD) $(TARGET).dol $(TARGET).elf src/wii/font_data.c
+	# Regenerate font_data.c (xxd -i) right away: the CFILES wildcard is
+	# evaluated fresh on the next `make` and will not match a missing file,
+	# so a plain `make clean && make` would fail with `undefined reference to
+	# font_ttf`. Re-emit it so the clean tree still links.
+	@cd src/wii && xxd -i font.ttf > font_data.c
 
 #-------------------------------------------------------------------------------
 else
@@ -178,10 +158,9 @@ DEPENDS	:=	$(OFILES:.o=.d)
 #-------------------------------------------------------------------------------
 # main targets
 #-------------------------------------------------------------------------------
-all	:	$(OUTPUT).wuhb
+all	:	$(OUTPUT).dol
 
-$(OUTPUT).wuhb	:	$(OUTPUT).rpx
-$(OUTPUT).rpx	:	$(OUTPUT).elf
+$(OUTPUT).dol	:	$(OUTPUT).elf
 $(OUTPUT).elf	:	$(OFILES)
 
 $(OFILES_SRC)	: $(HFILES_BIN)
