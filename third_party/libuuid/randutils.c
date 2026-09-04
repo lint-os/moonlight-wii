@@ -13,7 +13,7 @@
 #include <string.h>
 #include <sys/time.h>
 
-#ifndef __WIIU__
+#if !defined(__WIIU__) && !defined(__WII__)
 #include <sys/syscall.h>
 #endif
 

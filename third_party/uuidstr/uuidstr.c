@@ -2,6 +2,38 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
+
+static unsigned int uuid_seed;
+
+static unsigned int uuid_next(void) {
+    unsigned int x;
+
+    if (!uuid_seed)
+        uuid_seed = (unsigned int)time(NULL) ^ (unsigned int)(unsigned long)&uuid_seed;
+
+    x = uuid_seed;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    uuid_seed = x;
+    return x;
+}
+
+bool uuidstr_random(uuidstr_t *dest) {
+    static const char hex[] = "0123456789abcdef";
+    char *d = dest->data;
+    int i, pos = 0;
+
+    for (i = 0; i < 32; i++) {
+        if (i == 8 || i == 12 || i == 16 || i == 20)
+            d[pos++] = '-';
+        d[pos++] = hex[(uuid_next() >> 28) & 0xF];
+    }
+
+    dest->zero = 0;
+    return true;
+}
 
 void uuidstr_fromstr(uuidstr_t *dest, const char *src) {
     memcpy(dest->data, src, UUIDSTR_LENGTH);
