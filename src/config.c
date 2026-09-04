@@ -28,15 +28,50 @@
 #include <sys/types.h>
 #include <limits.h>
 
-#ifdef __WIIU__
-extern int disable_gamepad;
-extern int swap_buttons;
-extern mouse_modes mouse_mode;
+#ifdef __WII__
 extern int autostream;
 
 extern ssize_t getline(char **buf, size_t *bufsiz, FILE *fp);
 
-#define MOONLIGHT_WIIU_PATH "/vol/external01/wiiu/apps/moonlight"
+#include <sys/stat.h>
+#include <errno.h>
+
+static int wii_mkdirs(const char* path) {
+  char buf[PATH_MAX];
+  char* p = buf;
+  strncpy(p, path, PATH_MAX - 1);
+  buf[PATH_MAX - 1] = '\0';
+  for (; *p != '\0'; p++) {
+    if (*p == '/') {
+      *p = '\0';
+      if (mkdir(buf, 0775) != 0 && errno != EEXIST)
+        return -1;
+      *p = '/';
+    }
+  }
+  if (mkdir(buf, 0775) != 0 && errno != EEXIST)
+    return -1;
+  return 0;
+}
+
+void config_ensure_wii(void) {
+  wii_mkdirs(MOONLIGHT_WII_PATH "/keys");
+  wii_mkdirs(MOONLIGHT_WII_PATH "/hosts");
+
+  if (access(MOONLIGHT_WII_PATH "/moonlight.conf", F_OK) == -1) {
+    FILE* f = fopen(MOONLIGHT_WII_PATH "/moonlight.conf", "w");
+    if (f != NULL) {
+      fprintf(f, "# Moonlight Wii configuration\n");
+      fprintf(f, "# Set the IP address of your Sunshine/GFE PC, then reboot.\n");
+      fprintf(f, "#address = 192.168.1.100\n");
+      fprintf(f, "#app = Steam\n");
+      fprintf(f, "#osd_overscan = 30\n");
+      fprintf(f, "#encrypt = none  # none|audio|video|all (video is slow on the Wii)\n");
+      fprintf(f, "#tls_test = 192.168.1.100:47984\n");
+      fclose(f);
+    }
+  }
+}
 #endif
 
 #define MOONLIGHT_PATH "/moonlight"
@@ -79,20 +114,20 @@ static struct option long_options[] = {
   {"rotate", required_argument, NULL, '3'},
   {"verbose", no_argument, NULL, 'z'},
   {"debug", no_argument, NULL, 'Z'},
-#ifdef __WIIU__
-  {"disable_gamepad", no_argument, NULL, 'A'},
-  {"swap_buttons", no_argument, NULL, 'B'},
+#ifdef __WII__
   {"autostream", no_argument, NULL, 'C'},
-  {"mouse_mode", required_argument, NULL, 'D'},
 #endif
   {"nomouseemulation", no_argument, NULL, '4'},
   {"pin", required_argument, NULL, '5'},
   {"port", required_argument, NULL, '6'},
   {"hdr", no_argument, NULL, '7'},
+  {"osd_overscan", required_argument, NULL, '8'},
+  {"tls_test", required_argument, NULL, '9'},
+  {"encrypt", required_argument, NULL, 'e'},
   {0, 0, 0, 0},
 };
 
-#ifndef __WIIU__
+#ifndef __WII__
 char* get_path(char* name, char* extra_data_dirs) {
   const char *xdg_config_dir = getenv("XDG_CONFIG_DIR");
   const char *home_dir = getenv("HOME");
@@ -184,7 +219,7 @@ static void parse_argument(int c, char* value, PCONFIGURATION config) {
     inputAdded = true;
     break;
   case 'k':
-#ifndef __WIIU__
+#ifndef __WII__
     config->mapping = get_path(value, getenv("XDG_DATA_DIRS"));
     if (config->mapping == NULL) {
       fprintf(stderr, "Unable to open custom mapping file: %s\n", value);
@@ -264,23 +299,9 @@ static void parse_argument(int c, char* value, PCONFIGURATION config) {
   case 'Z':
     config->debug_level = 2;
     break;
-#ifdef __WIIU__
-  case 'A':
-    disable_gamepad = true;
-    break;
-  case 'B':
-    swap_buttons = true;
-    break;
+#ifdef __WII__
   case 'C':
     autostream = true;
-    break;
-  case 'D':
-    if (strcasecmp(value, "relative") == 0)
-      mouse_mode = MOUSE_MODE_RELATIVE;
-    else if (strcasecmp(value, "absolute") == 0)
-      mouse_mode = MOUSE_MODE_ABSOLUTE;
-    else if (strcasecmp(value, "touchscreen") == 0)
-      mouse_mode = MOUSE_MODE_TOUCHSCREEN;
     break;
 #endif
   case '4':
@@ -294,6 +315,24 @@ static void parse_argument(int c, char* value, PCONFIGURATION config) {
     break;
   case '7':
     config->hdr = true;
+    break;
+  case '8':
+    config->osd_overscan = atoi(value);
+    break;
+  case '9':
+    config->tls_test = strdup(value);
+    break;
+  case 'e':
+    if (value != NULL) {
+      if (strcasecmp(value, "none") == 0)
+        config->stream.encryptionFlags = ENCFLG_NONE;
+      else if (strcasecmp(value, "audio") == 0)
+        config->stream.encryptionFlags = ENCFLG_AUDIO;
+      else if (strcasecmp(value, "video") == 0)
+        config->stream.encryptionFlags = ENCFLG_VIDEO;
+      else if (strcasecmp(value, "all") == 0)
+        config->stream.encryptionFlags = ENCFLG_AUDIO | ENCFLG_VIDEO;
+    }
     break;
   case 1:
     if (config->action == NULL)
@@ -317,7 +356,7 @@ bool config_file_parse(char* filename, PCONFIGURATION config) {
   char *line = NULL;
   size_t len = 0;
 
-#ifdef __WIIU__
+#ifdef __WII__
   char* value = malloc(4096);
   if (!value) {
     return false;
@@ -325,12 +364,12 @@ bool config_file_parse(char* filename, PCONFIGURATION config) {
 #endif
 
   while (getline(&line, &len, fd) != -1) {
-#ifndef __WIIU__ // Wii U doesn't like %m
+#ifndef __WII__ // embedded newlib doesn't like %m
   char *key = NULL, *value = NULL;
     if (sscanf(line, "%ms = %m[^\n]", &key, &value) == 2) {
 #else
     char key[1024];
-    if (sscanf(line, "%1023s = %4095s[^\n]", key, value) == 2) {
+    if (sscanf(line, "%1023s = %4095[^\n]", key, value) == 2) {
 #endif
       if (strcmp(key, "address") == 0) {
         config->address = strdup(value);
@@ -346,15 +385,33 @@ bool config_file_parse(char* filename, PCONFIGURATION config) {
           }
         }
       }
+#ifndef __WII__
+      free(key);
+      free(value);
+#endif
     }
   }
 
-#ifdef __WIIU__
+  free(line);
+
+#ifdef __WII__
   free(value);
 #endif
 
   fclose(fd);
   return true;
+}
+
+static const char* encryption_flags_string(int flags) {
+  bool audio = (flags & ENCFLG_AUDIO) != 0;
+  bool video = (flags & ENCFLG_VIDEO) != 0;
+  if (audio && video)
+    return "all";
+  if (video)
+    return "video";
+  if (audio)
+    return "audio";
+  return "none";
 }
 
 void config_save(char* filename, PCONFIGURATION config) {
@@ -364,16 +421,20 @@ void config_save(char* filename, PCONFIGURATION config) {
     exit(EXIT_FAILURE);
   }
 
-  if (config->stream.width != 1280)
-    write_config_int(fd, "width", config->stream.width);
-  if (config->stream.height != 720)
-    write_config_int(fd, "height", config->stream.height);
-  if (config->stream.fps != 60)
-    write_config_int(fd, "fps", config->stream.fps);
-  if (config->stream.bitrate != -1)
-    write_config_int(fd, "bitrate", config->stream.bitrate);
-  if (config->stream.packetSize != 1024)
-    write_config_int(fd, "packetsize", config->stream.packetSize);
+  if (config->address != NULL)
+    write_config_string(fd, "address", config->address);
+
+  // Always write the numeric stream params. The old "write only if it differs
+  // from the desktop default" guards used 1280/720/60 sentinels, but the Wii
+  // defaults are 640x480@30 -- so setting fps to 60 (or the 1280x720
+  // resolution) matched a sentinel and the line was silently dropped, making
+  // it look like the config wasn't saved.
+  write_config_int(fd, "width", config->stream.width);
+  write_config_int(fd, "height", config->stream.height);
+  write_config_int(fd, "fps", config->stream.fps);
+  write_config_int(fd, "bitrate", config->stream.bitrate);
+  write_config_int(fd, "packetsize", config->stream.packetSize);
+  write_config_string(fd, "encrypt", encryption_flags_string(config->stream.encryptionFlags));
   if (!config->sops)
     write_config_bool(fd, "sops", config->sops);
   if (config->localaudio)
@@ -384,9 +445,14 @@ void config_save(char* filename, PCONFIGURATION config) {
     write_config_bool(fd, "viewonly", config->viewonly);
   if (config->rotate != 0)
     write_config_int(fd, "rotate", config->rotate);
+  if (config->osd_overscan != 0)
+    write_config_int(fd, "osd_overscan", config->osd_overscan);
 
   if (strcmp(config->app, "Steam") != 0)
     write_config_string(fd, "app", config->app);
+
+  if (config->tls_test != NULL)
+    write_config_string(fd, "tls_test", config->tls_test);
 
   fclose(fd);
 }
@@ -417,9 +483,11 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
   }
 #endif
 
-#ifdef __WIIU__
-  // TODO test how slow audio encryption is
+#ifdef __WII__
+  // the Wii can only decode H264 in software at 480p/30
   config->stream.encryptionFlags = ENCFLG_NONE;
+  config->stream.width = 640;
+  config->stream.height = 480;
   config->stream.fps = 30;
 #endif
 
@@ -442,20 +510,22 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
   config->hdr = false;
   config->pin = 0;
   config->port = 47989;
+  config->osd_overscan = 0;
+  config->tls_test = NULL;
 
   config->inputsCount = 0;
 
-#ifndef __WIIU__
+#ifndef __WII__
   config->codec = CODEC_UNSPECIFIED;
   config->mapping = get_path("gamecontrollerdb.txt", getenv("XDG_DATA_DIRS"));
   config->key_dir[0] = 0;
 #else
   config->codec = CODEC_H264;
   config->mapping = (char*) "";
-  strcpy(config->key_dir, MOONLIGHT_WIIU_PATH "/keys");
+  strcpy(config->key_dir, MOONLIGHT_WII_PATH "/keys");
 #endif
 
-#ifndef __WIIU__
+#ifndef __WII__
   char* config_file = get_path("moonlight.conf", "/etc");
   if (config_file)
     config_file_parse(config_file, config);
@@ -487,7 +557,7 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
       sprintf(config->key_dir, "%s" DEFAULT_CACHE_DIR MOONLIGHT_PATH, pw->pw_dir);
   }
 #else
-  char* config_file = (char*) MOONLIGHT_WIIU_PATH "/moonlight.conf";
+  char* config_file = (char*) MOONLIGHT_WII_PATH "/moonlight.conf";
   if (config_file)
     config_file_parse(config_file, config);
 #endif

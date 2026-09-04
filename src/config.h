@@ -21,6 +21,12 @@
 
 #include <stdbool.h>
 
+#ifdef __WII__
+// SD card root is "/" (fatInitDefault sets cwd to the SD root), so keep the
+// data directly at the root rather than under an extra "sd" folder.
+#define MOONLIGHT_WII_PATH "/moonlight"
+#endif
+
 #define MAX_INPUTS 6
 
 enum codecs { CODEC_UNSPECIFIED, CODEC_H264, CODEC_HEVC, CODEC_AV1 };
@@ -56,9 +62,13 @@ typedef struct _CONFIGURATION {
   bool hdr;
   int pin;
   unsigned short port;
+  int osd_overscan;
+  char* tls_test;
 } CONFIGURATION, *PCONFIGURATION;
 
 extern bool inputAdded;
 
 bool config_file_parse(char* filename, PCONFIGURATION config);
+void config_save(char* filename, PCONFIGURATION config);
 void config_parse(int argc, char* argv[], PCONFIGURATION config);
+void config_ensure_wii(void);
