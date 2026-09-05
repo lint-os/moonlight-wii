@@ -10,8 +10,6 @@ keys/
 *.elf
 *.map
 dist/
-# generated from font.ttf via `xxd -i` (see Makefile)
-src/wii/font_data.c
 
 # ffmpeg: source is committed, all compilation happens at runtime
 *.o

@@ -153,8 +153,14 @@ dist: all
 	cp moonlight.conf dist/wii/apps/moonlight/
 	cp moonlight.dol dist/wii/apps/moonlight/
 
+# font_data.c is committed (the devkitPPC image has no xxd); only
+# regenerate when font.ttf changes and xxd is available.
 src/wii/font_data.c: src/wii/font.ttf
-	cd src/wii && xxd -i font.ttf > font_data.c
+	@if command -v xxd >/dev/null 2>&1; then \
+		cd src/wii && xxd -i font.ttf > font_data.c; \
+	else \
+		echo "xxd not found; using committed font_data.c"; \
+	fi
 
 $(BUILD): src/wii/font_data.c
 	@[ -d $@ ] || mkdir -p $@
@@ -163,15 +169,10 @@ $(BUILD): src/wii/font_data.c
 #-------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).dol $(TARGET).elf src/wii/font_data.c \
+	@rm -fr $(BUILD) $(TARGET).dol $(TARGET).elf \
 		third_party/ffmpeg-wii/lib/*.a \
 		$(FFMPEG_SRC)/*.o $(FFMPEG_SRC)/*/*.o $(FFMPEG_SRC)/*/*/*.o \
 		$(FFMPEG_SRC)/version.h $(FFMPEG_SRC)/.version
-	# Regenerate font_data.c (xxd -i) right away: the CFILES wildcard is
-	# evaluated fresh on the next `make` and will not match a missing file,
-	# so a plain `make clean && make` would fail with `undefined reference to
-	# font_ttf`. Re-emit it so the clean tree still links.
-	@cd src/wii && xxd -i font.ttf > font_data.c
 
 #-------------------------------------------------------------------------------
 else
