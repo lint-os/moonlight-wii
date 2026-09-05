@@ -7,8 +7,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-      with:
-        submodules: recursive
     - name: build binary
       run: |
         docker build -f Dockerfile -t moonlight-wii-builder .
