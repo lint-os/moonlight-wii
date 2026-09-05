@@ -148,10 +148,12 @@ export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib) -L$(LIBOGC_LIB)
 #-------------------------------------------------------------------------------
 all: $(BUILD)
 
+#TODO: fix this to make this generate at least the XML dynamically
 dist: all
 	mkdir -p dist/wii/apps/moonlight
-	cp moonlight.conf dist/wii/apps/moonlight/
-	cp moonlight.dol dist/wii/apps/moonlight/
+	cp moonlight.dol dist/wii/apps/moonlight/boot.dol
+	cp icon.png dist/wii/apps/moonlight/
+	cp meta.xml dist/wii/apps/moonlight/
 
 # font_data.c is committed (the devkitPPC image has no xxd); only
 # regenerate when font.ttf changes and xxd is available.

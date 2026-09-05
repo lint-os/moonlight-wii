@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="ISO-8859-1" standalone="yes"?>
+<app version="1">
+    <name>Moonliight</name>
+    <coder>lintos/RandLinThing</coder>
+    <version>0.01</version>
+    <release_date>20260904000000</release_date>
+    <short_description>Moonlight Game Stream</short_description>
+    <long_description>Project website: https://github.com/lint-os/moonlight-wii Moonlight allows you to stream games and apps from your PC running Sunshine to your Wii</long_description>
+    <no_ios_reload/>
+</app>
