@@ -55,7 +55,7 @@
 
 static VLC mv_vlc;
 
-extern int sync_interlace;
+static int sync_interlace = 0;
 
 /* as H.263, but only 17 codes */
 static int mpeg_decode_motion(MpegEncContext *s, int fcode, int pred)

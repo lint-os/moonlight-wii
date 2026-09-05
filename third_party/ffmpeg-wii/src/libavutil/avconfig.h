@@ -3,5 +3,19 @@
 #define AVUTIL_AVCONFIG_H
 #define AV_HAVE_BIGENDIAN 1
 #define AV_HAVE_FAST_UNALIGNED 1
+#define ARCH_PPC 1
+#define ARCH_PPC64 0
+#define ARCH_X86 0
+#define ARCH_ARM 0
+#define ARCH_AARCH64 0
+#define ARCH_MIPS 0
+#define ARCH_MIPS64 0
+#define ARCH_ALPHA 0
+#define ARCH_SH4 0
+#define ARCH_SPARC 0
+#define ARCH_M68K 0
+#define ARCH_BFIN 0
+#define ARCH_AVR32 0
+#define ARCH_TOMI 0
 #endif /* AVUTIL_AVCONFIG_H */
 

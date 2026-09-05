@@ -17,13 +17,12 @@ src/wii/font_data.c
 *.o
 *.d
 third_party/ffmpeg-wii/**/*.a
-third_party/ffmpeg-wii/src/.config
-third_party/ffmpeg-wii/src/.version
-third_party/ffmpeg-wii/src/config.h
-third_party/ffmpeg-wii/src/config.mak
 third_party/ffmpeg-wii/src/version.h
-# duplicate backup of the prebuilt libs in lib/
-third_party/ffmpeg-wii/lib/prebuilt_backup/
+third_party/ffmpeg-wii/src/.version
+third_party/ffmpeg-wii/src/.config
+# tablegen host tools and generated table headers (built at runtime)
+third_party/ffmpeg-wii/src/libavcodec/*_tablegen
+third_party/ffmpeg-wii/src/libavcodec/*_tables.h
 
 # stale WiiU-era entries (harmless, kept for safety)
 /.vscode/

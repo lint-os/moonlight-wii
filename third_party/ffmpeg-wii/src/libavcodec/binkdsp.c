@@ -24,9 +24,10 @@
  * Bink DSP routines
  */
 
+#include "config.h"
 #include "dsputil.h"
 #include "binkdsp.h"
-#ifdef HAVE_PAIRED
+#if HAVE_PAIRED
 #include "libavutil/ppc/paired.h"
 #endif
 
@@ -131,7 +132,7 @@ static void scale_block_c(const uint8_t src[64]/*align 8*/, uint8_t *dst/*align 
     }
 }
 
-#ifdef HAVE_PAIRED
+#if HAVE_PAIRED
 static void scale_block_paired(const uint8_t src[64], uint8_t *dst, int linesize)
 {
 	const float scalar = 257.0;
@@ -170,5 +171,7 @@ void ff_binkdsp_init(BinkDSPContext *c)
     c->idct_add    = bink_idct_add_c;
     c->idct_put    = bink_idct_put_c;    
     c->scale_block = scale_block_c;
-    if (HAVE_PAIRED) c->scale_block = scale_block_paired;
+#if HAVE_PAIRED
+    c->scale_block = scale_block_paired;
+#endif
 }

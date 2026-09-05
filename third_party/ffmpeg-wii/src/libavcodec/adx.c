@@ -22,8 +22,8 @@
 #include "libavutil/mathematics.h"
 #include "adx.h"
 
-extern double loop_st_point;
-extern double loop_ed_point;
+static double loop_st_point = 0;
+static double loop_ed_point = 0;
 //uint16_t offset_start = 0;
 
 void ff_adx_calculate_coeffs(int cutoff, int sample_rate, int bits, int *coeff)

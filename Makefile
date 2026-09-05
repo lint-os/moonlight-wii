@@ -68,6 +68,27 @@ LDFLAGS	=	$(ARCH) -T$(DEVKITPPC)/powerpc-eabi/lib/rvl.ld -Wl,-Map,$(notdir $*.ma
 			-L$(TOPDIR)/third_party/ffmpeg-wii/lib -lavcodec -lswscale -lavutil \
 			-lm
 
+.DEFAULT_GOAL := all
+
+# ffmpeg: no prebuilt libs in the repo, build the static libs at runtime
+# from the committed source tree (needs DEVKITPRO + DEVKITPPC)
+FFMPEG_SRC	:=	$(TOPDIR)/third_party/ffmpeg-wii/src
+FFMPEG_LIBS	:=	$(TOPDIR)/third_party/ffmpeg-wii/lib/libavcodec.a \
+		$(TOPDIR)/third_party/ffmpeg-wii/lib/libswscale.a \
+		$(TOPDIR)/third_party/ffmpeg-wii/lib/libavutil.a
+
+FFMPEG_SRCS	:=	$(shell find $(FFMPEG_SRC) \( -name '*.c' -o -name '*.h' \
+		-o -name '*.S' -o -name '*.mak' -o -name 'Makefile' \) 2>/dev/null)
+
+$(FFMPEG_LIBS): $(FFMPEG_SRCS)
+	@echo building ffmpeg ...
+	@cd $(FFMPEG_SRC) && revision=0.10 $(MAKE) --no-print-directory \
+		libavutil/libavutil.a libavcodec/libavcodec.a libswscale/libswscale.a
+	@mkdir -p $(TOPDIR)/third_party/ffmpeg-wii/lib
+	@cp $(FFMPEG_SRC)/libavutil/libavutil.a \
+	    $(FFMPEG_SRC)/libavcodec/libavcodec.a \
+	    $(FFMPEG_SRC)/libswscale/libswscale.a $(TOPDIR)/third_party/ffmpeg-wii/lib/
+
 #-------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level
 # containing include and lib
@@ -142,7 +163,10 @@ $(BUILD): src/wii/font_data.c
 #-------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).dol $(TARGET).elf src/wii/font_data.c
+	@rm -fr $(BUILD) $(TARGET).dol $(TARGET).elf src/wii/font_data.c \
+		third_party/ffmpeg-wii/lib/*.a \
+		$(FFMPEG_SRC)/*.o $(FFMPEG_SRC)/*/*.o $(FFMPEG_SRC)/*/*/*.o \
+		$(FFMPEG_SRC)/version.h $(FFMPEG_SRC)/.version
 	# Regenerate font_data.c (xxd -i) right away: the CFILES wildcard is
 	# evaluated fresh on the next `make` and will not match a missing file,
 	# so a plain `make clean && make` would fail with `undefined reference to
@@ -161,7 +185,7 @@ DEPENDS	:=	$(OFILES:.o=.d)
 all	:	$(OUTPUT).dol
 
 $(OUTPUT).dol	:	$(OUTPUT).elf
-$(OUTPUT).elf	:	$(OFILES)
+$(OUTPUT).elf	:	$(OFILES) $(FFMPEG_LIBS)
 
 $(OFILES_SRC)	: $(HFILES_BIN)
 
